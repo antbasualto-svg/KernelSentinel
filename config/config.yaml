@@ -1,0 +1,119 @@
+agent:
+  name: "eBPF-Sentinel-HIDS"
+  version: "1.4.0"
+  log_file: "logs/alerts.log"
+  log_to_stdout: false               # Desactivar en producción para evitar sobrecarga en journald
+  only_log_threats: true             # Si es true, descarta eventos con status NORMAL
+
+# ------------------------------------------------------------------------------
+# FILTROS Y EXCLUSIONES (Anti-Loop / Ruido)
+# ------------------------------------------------------------------------------
+whitelist:
+  ignored_processes:
+    - "promtail"
+    - "systemd"
+    - "dockerd"
+    - "containerd"
+    - "ebpf-hids"
+  ignored_file_patterns:
+    - "promtail_positions"
+    - ".promtail"
+    - "*.log"
+    - "*.swp"
+  ignored_users:
+    - 65534                          # nobody
+
+# ------------------------------------------------------------------------------
+# SUPERVISIÓN DE SISTEMA DE ARCHIVOS (openat / write)
+# ------------------------------------------------------------------------------
+monitored_paths:
+  suspicious_directories:
+    - "/tmp"
+    - "/dev/shm"
+    - "/var/tmp"
+    - "/var/www"
+    - "/dev/mqueue"
+  critical_system_files:
+    - "/etc/shadow"
+    - "/etc/gshadow"
+    - "/etc/sudoers"
+    - "/etc/sudoers.d"
+    - "/etc/passwd"
+    - "/etc/pam.d"
+    - "/root/.ssh/authorized_keys"
+    - "/etc/crontab"
+    - "/etc/cron.d"
+    - "/etc/ld.so.preload"
+  auth_trusted_binaries:
+    - "polkitd"
+    - "unix_chkpwd"
+    - "login"
+    - "sshd"
+    - "systemd"
+    - "cron"
+    - "crond"
+    - "sudo"
+# ------------------------------------------------------------------------------
+# AUDITORÍA DE EJECUCIÓN (sys_enter_execve)
+# ------------------------------------------------------------------------------
+process_execution:
+  suspicious_binaries:
+    - "nc"
+    - "ncat"
+    - "netcat"
+    - "nmap"
+    - "socat"
+    - "tcpdump"
+    - "wireshark"
+    - "mimikatz"
+    - "chisel"
+  reconnaissance_commands:
+    - "whoami"
+    - "id"
+    - "uname"
+    - "ip"
+    - "ifconfig"
+    - "iptables"
+    - "ufw"
+  elevation_utilities:
+    - "sudo"
+    - "su"
+    - "pkexec"
+
+# ------------------------------------------------------------------------------
+# AUDITORÍA DE RED (sys_enter_connect)
+# ------------------------------------------------------------------------------
+network:
+  standard_outbound_ports:
+    - 80
+    - 443
+    - 53
+    - 123
+    - 3100                           # Puerto de Loki en Kali
+  blocked_ports:
+    - 4444                           # Metasploit default handler
+    - 5555
+    - 1337
+    - 6667
+  suspicious_interpreters:
+    - "sh"
+    - "bash"
+    - "zsh"
+    - "python"
+    - "python3"
+    - "perl"
+    - "ruby"
+    - "php"
+
+# ------------------------------------------------------------------------------
+# MATRIZ MITRE ATT&CK & THREAT INTEL
+# ------------------------------------------------------------------------------
+threat_intel:
+  yara_rules_path: "rules/threat_rules.yar"
+  sqlite_db_path: "data/threat_intel.db"
+  mitre_mappings:
+    webshell_detection: "T1505.003"  # Persistence: Web Shell
+    credential_access: "T1003.008"   # OS Credential Dumping: /etc/passwd and /etc/shadow
+    reverse_shell: "T1059.004"       # Command and Scripting Interpreter: Unix Shell
+    network_anomaly: "T1071.001"     # Application Layer Protocol: Web Protocols
+    rootkit_preload: "T1574.006"     # Hijack Execution Flow: LD_PRELOAD
